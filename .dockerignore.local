@@ -1,0 +1,51 @@
+# ビルド最適化用
+
+# Git
+.git
+.gitignore
+
+# 環境変数（セキュリティ）
+.env
+.env.local
+.env.*.local
+env.example
+
+# ドキュメント
+README.md
+*.md
+docs/
+
+# Dockerfile（ローカル開発用のみ使用、Leapcellでは自動ビルド）
+Dockerfile.local
+
+# テストファイル
+*_test.go
+test_*.go
+
+# データファイル
+*.db
+*.db-shm
+*.db-wal
+data/
+uploads/
+
+# スクリプト
+*.sh
+
+# 一時ファイル
+tmp/
+temp/
+*.tmp
+*.log
+
+# IDE設定
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS固有ファイル
+.DS_Store
+Thumbs.db
+

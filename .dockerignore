@@ -1,0 +1,33 @@
+# Leapcell用の最小限の.dockerignore
+# ローカル開発用の詳細な.dockerignoreは.dockerignore.localを参照
+
+# Git
+.git
+.gitignore
+
+# 環境変数（セキュリティ）
+.env
+.env.local
+.env.*.local
+
+# ローカル開発用Dockerfile
+Dockerfile.local
+.dockerignore.local
+
+# テストファイル
+*_test.go
+
+# データファイル
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# IDE設定
+.vscode/
+.idea/
+
+# OS固有ファイル
+.DS_Store
+Thumbs.db
+

@@ -127,10 +127,18 @@ func (s *EmailService) sendViaResend(to, subject, body string) error {
 	return nil
 }
 
+// sanitizeHeader メールヘッダインジェクション対策として CR/LF を除去
+func sanitizeHeader(v string) string {
+	return strings.NewReplacer("\r", "", "\n", "").Replace(v)
+}
+
 // sendViaSMTP SMTPでメール送信（開発環境：MailHog）
 func (s *EmailService) sendViaSMTP(to, subject, body string) error {
+	// ヘッダ行に流し込まれる値は CR/LF を除去してインジェクションを防ぐ
+	to = sanitizeHeader(to)
+	subject = sanitizeHeader(subject)
 	// メール形式
-	message := s.buildMessage(s.from, to, subject, body)
+	message := s.buildMessage(sanitizeHeader(s.from), to, subject, body)
 
 	// SMTPサーバーに接続（認証なし: MailHog用）
 	addr := fmt.Sprintf("%s:%s", s.smtpHost, s.smtpPort)

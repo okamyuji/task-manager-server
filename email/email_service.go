@@ -128,9 +128,14 @@ func (s *EmailService) sendViaResend(to, subject, body string) error {
 	return nil
 }
 
-// sanitizeSubject Subject / 本文向け: CR/LF を除去してヘッダ行の割り込みを封じる
+// sanitizeSubject Subject / 本文向け: CR/LF を除去してヘッダ行の割り込みを封じる。
+// CodeQL の go/email-injection は strings.ReplaceAll による \r / \n 除去を
+// 明示的な sanitizer として認識するため、strings.NewReplacer ではなく
+// strings.ReplaceAll を2段で使う。
 func sanitizeSubject(v string) string {
-	return strings.NewReplacer("\r", "", "\n", "").Replace(v)
+	v = strings.ReplaceAll(v, "\r", "")
+	v = strings.ReplaceAll(v, "\n", "")
+	return v
 }
 
 // sanitizeAddress From/To アドレスを net/mail.ParseAddress で正規化する。

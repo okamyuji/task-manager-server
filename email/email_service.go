@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/mail"
 	"net/smtp"
 	"os"
 	"strings"
@@ -127,18 +128,36 @@ func (s *EmailService) sendViaResend(to, subject, body string) error {
 	return nil
 }
 
-// sanitizeHeader メールヘッダインジェクション対策として CR/LF を除去
-func sanitizeHeader(v string) string {
+// sanitizeSubject Subject / 本文向け: CR/LF を除去してヘッダ行の割り込みを封じる
+func sanitizeSubject(v string) string {
 	return strings.NewReplacer("\r", "", "\n", "").Replace(v)
+}
+
+// sanitizeAddress From/To アドレスを net/mail.ParseAddress で正規化する。
+// 不正なメールアドレスはインジェクションの原因になるため送信を中止する。
+func sanitizeAddress(v string) (string, error) {
+	addr, err := mail.ParseAddress(v)
+	if err != nil {
+		return "", fmt.Errorf("不正なメールアドレス: %w", err)
+	}
+	return addr.Address, nil
 }
 
 // sendViaSMTP SMTPでメール送信（開発環境：MailHog）
 func (s *EmailService) sendViaSMTP(to, subject, body string) error {
-	// ヘッダ行に流し込まれる値は CR/LF を除去してインジェクションを防ぐ
-	to = sanitizeHeader(to)
-	subject = sanitizeHeader(subject)
+	// ヘッダ行に流し込まれる値はサニタイズしてインジェクションを防ぐ
+	toAddr, err := sanitizeAddress(to)
+	if err != nil {
+		return err
+	}
+	fromAddr, err := sanitizeAddress(s.from)
+	if err != nil {
+		return err
+	}
+	subject = sanitizeSubject(subject)
 	// メール形式
-	message := s.buildMessage(sanitizeHeader(s.from), to, subject, body)
+	message := s.buildMessage(fromAddr, toAddr, subject, body)
+	to = toAddr
 
 	// SMTPサーバーに接続（認証なし: MailHog用）
 	addr := fmt.Sprintf("%s:%s", s.smtpHost, s.smtpPort)
@@ -150,11 +169,11 @@ func (s *EmailService) sendViaSMTP(to, subject, body string) error {
 	)
 
 	// MailHogは認証不要のため、smtp.SendMailを直接使用
-	err := smtp.SendMail(
+	err = smtp.SendMail(
 		addr,
 		nil, // 認証なし
-		s.from,
-		[]string{to},
+		fromAddr,
+		[]string{toAddr},
 		[]byte(message),
 	)
 

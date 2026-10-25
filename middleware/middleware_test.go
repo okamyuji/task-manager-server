@@ -39,8 +39,7 @@ func TestCORSMiddleware_許可されたオリジン(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	SetLogger(logger)
 
-	_ = os.Setenv("ALLOWED_ORIGINS", "https://example.com,https://test.com")
-	defer os.Clearenv()
+	t.Setenv("ALLOWED_ORIGINS", "https://example.com,https://test.com")
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -64,8 +63,7 @@ func TestCORSMiddleware_不許可オリジン(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	SetLogger(logger)
 
-	_ = os.Setenv("ALLOWED_ORIGINS", "https://example.com")
-	defer os.Clearenv()
+	t.Setenv("ALLOWED_ORIGINS", "https://example.com")
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -228,10 +226,7 @@ func TestGetAllowedOrigins(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Clearenv()
-			if tt.envValue != "" {
-				_ = os.Setenv("ALLOWED_ORIGINS", tt.envValue)
-			}
+			t.Setenv("ALLOWED_ORIGINS", tt.envValue)
 
 			result := getAllowedOrigins()
 

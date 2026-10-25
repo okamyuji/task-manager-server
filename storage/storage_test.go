@@ -124,10 +124,9 @@ func TestNewStorageService_ローカルストレージ(t *testing.T) {
 // TestNewStorageService_S3設定不完全でローカルにフォールバック
 func TestNewStorageService_S3設定不完全でローカルにフォールバック(t *testing.T) {
 	// 不完全なS3設定
-	_ = os.Setenv("STORAGE_TYPE", "s3")
-	_ = os.Setenv("S3_ENDPOINT", "https://example.com")
+	t.Setenv("STORAGE_TYPE", "s3")
+	t.Setenv("S3_ENDPOINT", "https://example.com")
 	// 他の設定なし
-	defer os.Clearenv()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	service := NewStorageService(logger)

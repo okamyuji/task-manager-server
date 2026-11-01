@@ -67,7 +67,7 @@ task-manager-server/
   - github.com/lib/pq (PostgreSQL driver)
   - golang.org/x/crypto/bcrypt
   - github.com/aws/aws-sdk-go-v2 (S3 SDK)
-  - github.com/resend/resend-go/v2 (Resend SDK)
+  - github.com/resend/resend-go/v4 (Resend SDK)
 - **認証**: JWT (HMAC-SHA256)
 - **メール**: MailHog (開発環境) / Resend API (本番環境)
 

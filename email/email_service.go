@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/resend/resend-go/v2"
+	"github.com/resend/resend-go/v4"
 )
 
 // EmailSender メール送信インターフェース

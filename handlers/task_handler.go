@@ -345,7 +345,12 @@ func (h *TaskHandler) completeTask(w http.ResponseWriter, r *http.Request, userI
 	}
 
 	// 更新後のタスクを取得
-	updatedTask, _ := h.taskRepo.GetByID(r.Context(), taskID)
+	updatedTask, err := h.taskRepo.GetByID(r.Context(), taskID)
+	if err != nil || updatedTask == nil {
+		h.logger.Error("更新後のタスク取得エラー", "error", err, "task_id", taskID, "user_id", userID)
+		RespondWithError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
 
 	h.logger.Info("タスク完了", "task_id", taskID, "user_id", userID, "title", task.Title)
 	RespondWithJSON(w, http.StatusOK, repositoryTaskToAPITask(updatedTask))
@@ -391,7 +396,12 @@ func (h *TaskHandler) incompleteTask(w http.ResponseWriter, r *http.Request, use
 	}
 
 	// 更新後のタスクを取得
-	updatedTask, _ := h.taskRepo.GetByID(r.Context(), taskID)
+	updatedTask, err := h.taskRepo.GetByID(r.Context(), taskID)
+	if err != nil || updatedTask == nil {
+		h.logger.Error("更新後のタスク取得エラー", "error", err, "task_id", taskID, "user_id", userID)
+		RespondWithError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
 
 	h.logger.Info("タスク未完了化", "task_id", taskID, "user_id", userID, "title", task.Title)
 	RespondWithJSON(w, http.StatusOK, repositoryTaskToAPITask(updatedTask))

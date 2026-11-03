@@ -258,6 +258,62 @@ func TestTaskHandler_CompleteTask_正常系(t *testing.T) {
 	}
 }
 
+// failAfterUpdateRepository 更新後の再取得だけを失敗させる（更新直後のクライアント切断を再現する）
+type failAfterUpdateRepository struct {
+	*mockTaskRepository
+	updated  bool
+	afterErr error // nil なら更新直後に削除された状態として (nil, nil) を返す
+}
+
+func (m *failAfterUpdateRepository) GetByID(ctx context.Context, id string) (*repository.Task, error) {
+	if m.updated {
+		return nil, m.afterErr
+	}
+	return m.mockTaskRepository.GetByID(ctx, id)
+}
+
+func (m *failAfterUpdateRepository) Complete(ctx context.Context, id string) error {
+	m.updated = true
+	return m.mockTaskRepository.Complete(ctx, id)
+}
+
+func (m *failAfterUpdateRepository) Incomplete(ctx context.Context, id string) error {
+	m.updated = true
+	return m.mockTaskRepository.Incomplete(ctx, id)
+}
+
+// TestTaskHandler_完了状態の変更_異常系_更新後の再取得失敗
+func TestTaskHandler_完了状態の変更_異常系_更新後の再取得失敗(t *testing.T) {
+	cases := []struct {
+		name     string
+		action   string
+		afterErr error
+	}{
+		{"complete_切断", "complete", context.Canceled},
+		{"complete_削除済み", "complete", nil},
+		{"incomplete_切断", "incomplete", context.Canceled},
+		{"incomplete_削除済み", "incomplete", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+			taskRepo := &failAfterUpdateRepository{mockTaskRepository: newMockTaskRepository(), afterErr: tc.afterErr}
+			handler := NewTaskHandler(taskRepo, logger)
+			_ = taskRepo.Create(context.Background(), &repository.Task{ID: "task1", UserID: "user1", Title: "Task"})
+
+			req := httptest.NewRequest(http.MethodPatch, "/tasks/task1/"+tc.action, nil)
+			req.Header.Set("X-User-ID", "user1")
+			rec := httptest.NewRecorder()
+
+			handler.HandleTaskByID(rec, req)
+
+			if rec.Code != http.StatusInternalServerError {
+				t.Errorf("Expected status 500, got %d", rec.Code)
+			}
+		})
+	}
+}
+
 // TestTaskHandler_IncompleteTask_正常系
 func TestTaskHandler_IncompleteTask_正常系(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))

@@ -11,7 +11,7 @@ require (
 	github.com/resend/resend-go/v4 v4.9.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
-	golang.org/x/crypto v0.54.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/time v0.16.0
 )
 

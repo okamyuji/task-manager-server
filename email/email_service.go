@@ -199,9 +199,9 @@ func (s *EmailService) sendViaSMTP(to, subject, body string) error {
 func (s *EmailService) buildMessage(from, to, subject, body string) string {
 	var builder strings.Builder
 
-	builder.WriteString(fmt.Sprintf("From: %s\r\n", from))
-	builder.WriteString(fmt.Sprintf("To: %s\r\n", to))
-	builder.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
+	fmt.Fprintf(&builder, "From: %s\r\n", from)
+	fmt.Fprintf(&builder, "To: %s\r\n", to)
+	fmt.Fprintf(&builder, "Subject: %s\r\n", subject)
 	builder.WriteString("MIME-Version: 1.0\r\n")
 	builder.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
 	builder.WriteString("\r\n")

@@ -115,27 +115,6 @@ func TestMigrate_冪等性(t *testing.T) {
 	}
 }
 
-// TestBeginTx_正常系
-func TestBeginTx_正常系(t *testing.T) {
-	db, cleanup := setupTestPostgres(t)
-	defer cleanup()
-
-	tx, err := db.BeginTx()
-	if err != nil {
-		t.Fatalf("BeginTx() error = %v", err)
-	}
-
-	if tx == nil {
-		t.Fatal("BeginTx() returned nil transaction")
-	}
-
-	// ロールバック
-	err = tx.Rollback()
-	if err != nil {
-		t.Errorf("Rollback() error = %v", err)
-	}
-}
-
 // TestClose_正常系
 func TestClose_正常系(t *testing.T) {
 	db, cleanup := setupTestPostgres(t)

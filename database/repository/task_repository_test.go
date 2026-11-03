@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -33,7 +35,7 @@ func TestTaskRepository_Create_正常系(t *testing.T) {
 		Tags:        []string{"test", "important"},
 	}
 
-	err := taskRepo.Create(task)
+	err := taskRepo.Create(context.Background(), task)
 	assertNoError(t, err)
 
 	if task.ID == "" {
@@ -57,8 +59,68 @@ func TestTaskRepository_Create_異常系_存在しないユーザー(t *testing.
 		Title:  "Test Task",
 	}
 
-	err := taskRepo.Create(task)
+	err := taskRepo.Create(context.Background(), task)
 	assertError(t, err)
+}
+
+// TestTaskRepository_Create_異常系_タグ挿入失敗でタスクも残らない
+func TestTaskRepository_Create_異常系_タグ挿入失敗でタスクも残らない(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+	defer cleanupDB(t, db)
+
+	userRepo := NewUserRepository(db)
+	taskRepo := NewTaskRepository(db)
+	user := &User{Email: "rollback@example.com", PasswordHash: "password", Name: "Rollback User"}
+	assertNoError(t, userRepo.Create(user))
+
+	// 同じタグを2回入れて主キー違反を起こす
+	task := &Task{UserID: user.ID, Title: "Rollback Task", Tags: []string{"dup", "dup"}}
+	assertError(t, taskRepo.Create(context.Background(), task))
+
+	var count int
+	assertNoError(t, db.QueryRow("SELECT COUNT(*) FROM tasks WHERE id = $1", task.ID).Scan(&count))
+	assertEqual(t, count, 0)
+}
+
+// TestTaskRepository_Create_異常系_キャンセル済みcontext
+func TestTaskRepository_Create_異常系_キャンセル済みcontext(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+	defer cleanupDB(t, db)
+
+	userRepo := NewUserRepository(db)
+	taskRepo := NewTaskRepository(db)
+	user := &User{Email: "canceled@example.com", PasswordHash: "password", Name: "Canceled User"}
+	assertNoError(t, userRepo.Create(user))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := taskRepo.Create(ctx, &Task{UserID: user.ID, Title: "Canceled Task"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Create() error = %v, want context.Canceled", err)
+	}
+
+	tasks, err := taskRepo.GetByUserID(context.Background(), user.ID)
+	assertNoError(t, err)
+	assertEqual(t, len(tasks), 0)
+}
+
+// TestTaskRepository_GetByID_異常系_キャンセル済みcontext
+func TestTaskRepository_GetByID_異常系_キャンセル済みcontext(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+	defer cleanupDB(t, db)
+
+	taskRepo := NewTaskRepository(db)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := taskRepo.GetByID(ctx, "any-id")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("GetByID() error = %v, want context.Canceled", err)
+	}
 }
 
 // TestTaskRepository_GetByID_正常系
@@ -82,9 +144,9 @@ func TestTaskRepository_GetByID_正常系(t *testing.T) {
 		Title:  "Get By ID Task",
 		Tags:   []string{"test"},
 	}
-	assertNoError(t, taskRepo.Create(task))
+	assertNoError(t, taskRepo.Create(context.Background(), task))
 
-	retrieved, err := taskRepo.GetByID(task.ID)
+	retrieved, err := taskRepo.GetByID(context.Background(), task.ID)
 	assertNoError(t, err)
 
 	assertEqual(t, retrieved.ID, task.ID)
@@ -102,7 +164,7 @@ func TestTaskRepository_GetByID_異常系_存在しないID(t *testing.T) {
 
 	taskRepo := NewTaskRepository(db)
 
-	task, err := taskRepo.GetByID("nonexistent-id")
+	task, err := taskRepo.GetByID(context.Background(), "nonexistent-id")
 	assertNoError(t, err)
 	if task != nil {
 		t.Errorf("expected nil task, got %v", task)
@@ -130,11 +192,11 @@ func TestTaskRepository_GetByUserID_正常系(t *testing.T) {
 			UserID: user.ID,
 			Title:  "Task " + string(rune('A'+i)),
 		}
-		assertNoError(t, taskRepo.Create(task))
+		assertNoError(t, taskRepo.Create(context.Background(), task))
 		time.Sleep(time.Millisecond)
 	}
 
-	tasks, err := taskRepo.GetByUserID(user.ID)
+	tasks, err := taskRepo.GetByUserID(context.Background(), user.ID)
 	assertNoError(t, err)
 
 	if len(tasks) != 3 {
@@ -163,16 +225,16 @@ func TestTaskRepository_Update_正常系(t *testing.T) {
 		Title:  "Old Title",
 		Tags:   []string{"old"},
 	}
-	assertNoError(t, taskRepo.Create(task))
+	assertNoError(t, taskRepo.Create(context.Background(), task))
 
 	task.Title = "New Title"
 	task.Description = "Updated Description"
 	task.Tags = []string{"new", "updated"}
 
-	err := taskRepo.Update(task)
+	err := taskRepo.Update(context.Background(), task)
 	assertNoError(t, err)
 
-	retrieved, err := taskRepo.GetByID(task.ID)
+	retrieved, err := taskRepo.GetByID(context.Background(), task.ID)
 	assertNoError(t, err)
 	assertEqual(t, retrieved.Title, "New Title")
 	assertEqual(t, retrieved.Description, "Updated Description")
@@ -201,12 +263,12 @@ func TestTaskRepository_Delete_正常系(t *testing.T) {
 		UserID: user.ID,
 		Title:  "Delete Task",
 	}
-	assertNoError(t, taskRepo.Create(task))
+	assertNoError(t, taskRepo.Create(context.Background(), task))
 
-	err := taskRepo.Delete(task.ID)
+	err := taskRepo.Delete(context.Background(), task.ID)
 	assertNoError(t, err)
 
-	deletedTask, err := taskRepo.GetByID(task.ID)
+	deletedTask, err := taskRepo.GetByID(context.Background(), task.ID)
 	assertNoError(t, err)
 	if deletedTask != nil {
 		t.Errorf("expected nil (task should be deleted), got %v", deletedTask)
@@ -233,12 +295,12 @@ func TestTaskRepository_Complete_正常系(t *testing.T) {
 		UserID: user.ID,
 		Title:  "Complete Task",
 	}
-	assertNoError(t, taskRepo.Create(task))
+	assertNoError(t, taskRepo.Create(context.Background(), task))
 
-	err := taskRepo.Complete(task.ID)
+	err := taskRepo.Complete(context.Background(), task.ID)
 	assertNoError(t, err)
 
-	retrieved, err := taskRepo.GetByID(task.ID)
+	retrieved, err := taskRepo.GetByID(context.Background(), task.ID)
 	assertNoError(t, err)
 	if !retrieved.IsCompleted {
 		t.Error("Complete() タスクが完了していません")
@@ -268,13 +330,13 @@ func TestTaskRepository_incomplete_正常系(t *testing.T) {
 		UserID: user.ID,
 		Title:  "incomplete Task",
 	}
-	assertNoError(t, taskRepo.Create(task))
-	assertNoError(t, taskRepo.Complete(task.ID))
+	assertNoError(t, taskRepo.Create(context.Background(), task))
+	assertNoError(t, taskRepo.Complete(context.Background(), task.ID))
 
-	err := taskRepo.Incomplete(task.ID)
+	err := taskRepo.Incomplete(context.Background(), task.ID)
 	assertNoError(t, err)
 
-	retrieved, err := taskRepo.GetByID(task.ID)
+	retrieved, err := taskRepo.GetByID(context.Background(), task.ID)
 	assertNoError(t, err)
 	if retrieved.IsCompleted {
 		t.Error("incomplete() タスクが未完了になっていません")
@@ -305,14 +367,14 @@ func TestTaskRepository_GetByUserID_複数タスク(t *testing.T) {
 			UserID: user.ID,
 			Title:  "Task " + string(rune('A'+i)),
 		}
-		assertNoError(t, taskRepo.Create(task))
+		assertNoError(t, taskRepo.Create(context.Background(), task))
 		if i%2 == 0 {
-			assertNoError(t, taskRepo.Complete(task.ID))
+			assertNoError(t, taskRepo.Complete(context.Background(), task.ID))
 		}
 		time.Sleep(time.Millisecond)
 	}
 
-	allTasks, err := taskRepo.GetByUserID(user.ID)
+	allTasks, err := taskRepo.GetByUserID(context.Background(), user.ID)
 	assertNoError(t, err)
 
 	if len(allTasks) != 3 {

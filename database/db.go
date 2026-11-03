@@ -146,8 +146,3 @@ func (db *DB) Close() error {
 	db.logger.Info("データベース接続をクローズします")
 	return db.DB.Close()
 }
-
-// BeginTx トランザクションを開始（オプション指定可能）
-func (db *DB) BeginTx() (*sql.Tx, error) {
-	return db.Begin()
-}

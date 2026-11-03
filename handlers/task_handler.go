@@ -37,7 +37,7 @@ func (h *TaskHandler) HandleTasks(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		h.getTasks(w, userID)
+		h.getTasks(w, r, userID)
 	case http.MethodPost:
 		h.createTask(w, r, userID)
 	default:
@@ -81,19 +81,19 @@ func (h *TaskHandler) HandleTaskByID(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		h.getTask(w, userID, taskID)
+		h.getTask(w, r, userID, taskID)
 	case http.MethodPut:
 		h.updateTask(w, r, userID, taskID)
 	case http.MethodDelete:
-		h.deleteTask(w, userID, taskID)
+		h.deleteTask(w, r, userID, taskID)
 	default:
 		RespondWithError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
 }
 
 // getTasks タスク一覧を取得（自分のタスクのみ）
-func (h *TaskHandler) getTasks(w http.ResponseWriter, userID string) {
-	tasks, err := h.taskRepo.GetByUserID(userID)
+func (h *TaskHandler) getTasks(w http.ResponseWriter, r *http.Request, userID string) {
+	tasks, err := h.taskRepo.GetByUserID(r.Context(), userID)
 	if err != nil {
 		h.logger.Error("タスク一覧取得エラー", "error", err, "user_id", userID)
 		RespondWithError(w, http.StatusInternalServerError, "Internal server error")
@@ -111,8 +111,8 @@ func (h *TaskHandler) getTasks(w http.ResponseWriter, userID string) {
 }
 
 // getTask タスク詳細を取得（自分のタスクのみ）
-func (h *TaskHandler) getTask(w http.ResponseWriter, userID, taskID string) {
-	task, err := h.taskRepo.GetByID(taskID)
+func (h *TaskHandler) getTask(w http.ResponseWriter, r *http.Request, userID, taskID string) {
+	task, err := h.taskRepo.GetByID(r.Context(), taskID)
 	if err != nil {
 		h.logger.Error("タスク取得エラー", "error", err, "task_id", taskID, "user_id", userID)
 		RespondWithError(w, http.StatusInternalServerError, "Internal server error")
@@ -180,7 +180,7 @@ func (h *TaskHandler) createTask(w http.ResponseWriter, r *http.Request, userID 
 	}
 
 	// タスク作成
-	if err := h.taskRepo.Create(task); err != nil {
+	if err := h.taskRepo.Create(r.Context(), task); err != nil {
 		h.logger.Error("タスク作成エラー", "error", err, "user_id", userID)
 		RespondWithError(w, http.StatusInternalServerError, "Failed to create task")
 		return
@@ -199,7 +199,7 @@ func (h *TaskHandler) createTask(w http.ResponseWriter, r *http.Request, userID 
 // updateTask タスクを更新（自分のタスクのみ）
 func (h *TaskHandler) updateTask(w http.ResponseWriter, r *http.Request, userID, taskID string) {
 	// 既存タスクの確認
-	existingTask, err := h.taskRepo.GetByID(taskID)
+	existingTask, err := h.taskRepo.GetByID(r.Context(), taskID)
 	if err != nil {
 		h.logger.Error("タスク取得エラー", "error", err, "task_id", taskID, "user_id", userID)
 		RespondWithError(w, http.StatusInternalServerError, "Internal server error")
@@ -258,7 +258,7 @@ func (h *TaskHandler) updateTask(w http.ResponseWriter, r *http.Request, userID,
 	}
 
 	// タスク更新
-	if err := h.taskRepo.Update(task); err != nil {
+	if err := h.taskRepo.Update(r.Context(), task); err != nil {
 		h.logger.Error("タスク更新エラー", "error", err, "task_id", taskID, "user_id", userID)
 		RespondWithError(w, http.StatusInternalServerError, "Failed to update task")
 		return
@@ -269,9 +269,9 @@ func (h *TaskHandler) updateTask(w http.ResponseWriter, r *http.Request, userID,
 }
 
 // deleteTask タスクを削除（自分のタスクのみ）
-func (h *TaskHandler) deleteTask(w http.ResponseWriter, userID, taskID string) {
+func (h *TaskHandler) deleteTask(w http.ResponseWriter, r *http.Request, userID, taskID string) {
 	// 既存タスクの確認
-	task, err := h.taskRepo.GetByID(taskID)
+	task, err := h.taskRepo.GetByID(r.Context(), taskID)
 	if err != nil {
 		h.logger.Error("タスク取得エラー", "error", err, "task_id", taskID, "user_id", userID)
 		RespondWithError(w, http.StatusInternalServerError, "Internal server error")
@@ -295,7 +295,7 @@ func (h *TaskHandler) deleteTask(w http.ResponseWriter, userID, taskID string) {
 	}
 
 	// タスク削除
-	if err := h.taskRepo.Delete(taskID); err != nil {
+	if err := h.taskRepo.Delete(r.Context(), taskID); err != nil {
 		h.logger.Error("タスク削除エラー", "error", err, "task_id", taskID, "user_id", userID)
 		RespondWithError(w, http.StatusInternalServerError, "Failed to delete task")
 		return
@@ -314,7 +314,7 @@ func (h *TaskHandler) completeTask(w http.ResponseWriter, r *http.Request, userI
 	}
 
 	// 既存タスクの確認
-	task, err := h.taskRepo.GetByID(taskID)
+	task, err := h.taskRepo.GetByID(r.Context(), taskID)
 	if err != nil {
 		h.logger.Error("タスク取得エラー", "error", err, "task_id", taskID, "user_id", userID)
 		RespondWithError(w, http.StatusInternalServerError, "Internal server error")
@@ -338,14 +338,14 @@ func (h *TaskHandler) completeTask(w http.ResponseWriter, r *http.Request, userI
 	}
 
 	// タスク完了
-	if err := h.taskRepo.Complete(taskID); err != nil {
+	if err := h.taskRepo.Complete(r.Context(), taskID); err != nil {
 		h.logger.Error("タスク完了エラー", "error", err, "task_id", taskID, "user_id", userID)
 		RespondWithError(w, http.StatusInternalServerError, "Failed to complete task")
 		return
 	}
 
 	// 更新後のタスクを取得
-	updatedTask, _ := h.taskRepo.GetByID(taskID)
+	updatedTask, _ := h.taskRepo.GetByID(r.Context(), taskID)
 
 	h.logger.Info("タスク完了", "task_id", taskID, "user_id", userID, "title", task.Title)
 	RespondWithJSON(w, http.StatusOK, repositoryTaskToAPITask(updatedTask))
@@ -360,7 +360,7 @@ func (h *TaskHandler) incompleteTask(w http.ResponseWriter, r *http.Request, use
 	}
 
 	// 既存タスクの確認
-	task, err := h.taskRepo.GetByID(taskID)
+	task, err := h.taskRepo.GetByID(r.Context(), taskID)
 	if err != nil {
 		h.logger.Error("タスク取得エラー", "error", err, "task_id", taskID, "user_id", userID)
 		RespondWithError(w, http.StatusInternalServerError, "Internal server error")
@@ -384,14 +384,14 @@ func (h *TaskHandler) incompleteTask(w http.ResponseWriter, r *http.Request, use
 	}
 
 	// タスク未完了化
-	if err := h.taskRepo.Incomplete(taskID); err != nil {
+	if err := h.taskRepo.Incomplete(r.Context(), taskID); err != nil {
 		h.logger.Error("タスク未完了化エラー", "error", err, "task_id", taskID, "user_id", userID)
 		RespondWithError(w, http.StatusInternalServerError, "Failed to incomplete task")
 		return
 	}
 
 	// 更新後のタスクを取得
-	updatedTask, _ := h.taskRepo.GetByID(taskID)
+	updatedTask, _ := h.taskRepo.GetByID(r.Context(), taskID)
 
 	h.logger.Info("タスク未完了化", "task_id", taskID, "user_id", userID, "title", task.Title)
 	RespondWithJSON(w, http.StatusOK, repositoryTaskToAPITask(updatedTask))

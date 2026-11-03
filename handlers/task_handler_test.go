@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -25,7 +26,7 @@ func newMockTaskRepository() *mockTaskRepository {
 	}
 }
 
-func (m *mockTaskRepository) Create(task *repository.Task) error {
+func (m *mockTaskRepository) Create(_ context.Context, task *repository.Task) error {
 	if task.ID == "" {
 		task.ID = "mock-task-id"
 	}
@@ -34,14 +35,14 @@ func (m *mockTaskRepository) Create(task *repository.Task) error {
 	return nil
 }
 
-func (m *mockTaskRepository) GetByID(id string) (*repository.Task, error) {
+func (m *mockTaskRepository) GetByID(_ context.Context, id string) (*repository.Task, error) {
 	if t, ok := m.tasks[id]; ok {
 		return t, nil
 	}
 	return nil, nil
 }
 
-func (m *mockTaskRepository) GetByUserID(userID string) ([]*repository.Task, error) {
+func (m *mockTaskRepository) GetByUserID(_ context.Context, userID string) ([]*repository.Task, error) {
 	var result []*repository.Task
 	for _, t := range m.tasks {
 		if t.UserID == userID {
@@ -51,17 +52,17 @@ func (m *mockTaskRepository) GetByUserID(userID string) ([]*repository.Task, err
 	return result, nil
 }
 
-func (m *mockTaskRepository) Update(task *repository.Task) error {
+func (m *mockTaskRepository) Update(_ context.Context, task *repository.Task) error {
 	m.tasks[task.ID] = task
 	return nil
 }
 
-func (m *mockTaskRepository) Delete(id string) error {
+func (m *mockTaskRepository) Delete(_ context.Context, id string) error {
 	delete(m.tasks, id)
 	return nil
 }
 
-func (m *mockTaskRepository) Complete(id string) error {
+func (m *mockTaskRepository) Complete(_ context.Context, id string) error {
 	if t, ok := m.tasks[id]; ok {
 		t.IsCompleted = true
 		now := time.Now()
@@ -71,7 +72,7 @@ func (m *mockTaskRepository) Complete(id string) error {
 	return nil
 }
 
-func (m *mockTaskRepository) Incomplete(id string) error {
+func (m *mockTaskRepository) Incomplete(_ context.Context, id string) error {
 	if t, ok := m.tasks[id]; ok {
 		t.IsCompleted = false
 		t.CompletedAt = nil
@@ -95,7 +96,7 @@ func TestTaskHandler_HandleTasks_GET_正常系(t *testing.T) {
 		Priority:    "high",
 		Tags:        []string{"test"},
 	}
-	_ = taskRepo.Create(task)
+	_ = taskRepo.Create(context.Background(), task)
 
 	req := httptest.NewRequest(http.MethodGet, "/tasks", nil)
 	req.Header.Set("X-User-ID", "user1")
@@ -143,7 +144,7 @@ func TestTaskHandler_HandleTaskByID_GET_正常系(t *testing.T) {
 		UserID: "user1",
 		Title:  "Test Task",
 	}
-	_ = taskRepo.Create(task)
+	_ = taskRepo.Create(context.Background(), task)
 
 	req := httptest.NewRequest(http.MethodGet, "/tasks/task1", nil)
 	req.Header.Set("X-User-ID", "user1")
@@ -167,7 +168,7 @@ func TestTaskHandler_HandleTaskByID_GET_異常系_権限なし(t *testing.T) {
 		UserID: "user1",
 		Title:  "Test Task",
 	}
-	_ = taskRepo.Create(task)
+	_ = taskRepo.Create(context.Background(), task)
 
 	req := httptest.NewRequest(http.MethodGet, "/tasks/task1", nil)
 	req.Header.Set("X-User-ID", "user2")
@@ -191,7 +192,7 @@ func TestTaskHandler_HandleTaskByID_PUT_正常系(t *testing.T) {
 		UserID: "user1",
 		Title:  "Old Title",
 	}
-	_ = taskRepo.Create(task)
+	_ = taskRepo.Create(context.Background(), task)
 
 	reqBody := models.Task{
 		Title:    "Updated Title",
@@ -220,7 +221,7 @@ func TestTaskHandler_HandleTaskByID_DELETE_正常系(t *testing.T) {
 		UserID: "user1",
 		Title:  "Delete Task",
 	}
-	_ = taskRepo.Create(task)
+	_ = taskRepo.Create(context.Background(), task)
 
 	req := httptest.NewRequest(http.MethodDelete, "/tasks/task1", nil)
 	req.Header.Set("X-User-ID", "user1")
@@ -244,7 +245,7 @@ func TestTaskHandler_CompleteTask_正常系(t *testing.T) {
 		UserID: "user1",
 		Title:  "Complete Task",
 	}
-	_ = taskRepo.Create(task)
+	_ = taskRepo.Create(context.Background(), task)
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/task1/complete", nil)
 	req.Header.Set("X-User-ID", "user1")
@@ -269,7 +270,7 @@ func TestTaskHandler_IncompleteTask_正常系(t *testing.T) {
 		Title:       "Incomplete Task",
 		IsCompleted: true,
 	}
-	_ = taskRepo.Create(task)
+	_ = taskRepo.Create(context.Background(), task)
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/task1/incomplete", nil)
 	req.Header.Set("X-User-ID", "user1")

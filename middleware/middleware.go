@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -178,12 +179,24 @@ func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			"path", r.URL.Path,
 		)
 
-		// クレームをコンテキストに追加（簡易実装のためヘッダーに設定）
-		r.Header.Set("X-User-ID", claims.UserID)
-		r.Header.Set("X-User-Email", claims.Email)
-
-		next(w, r)
+		next(w, r.WithContext(WithUserID(r.Context(), claims.UserID)))
 	}
+}
+
+// contextKey 他パッケージのキーと衝突しないよう独自型にする
+type contextKey string
+
+const userIDKey contextKey = "userID"
+
+// WithUserID 検証済みのユーザーIDを context に入れる
+func WithUserID(ctx context.Context, userID string) context.Context {
+	return context.WithValue(ctx, userIDKey, userID)
+}
+
+// UserIDFromContext 認証ミドルウェアが入れたユーザーIDを取り出す
+func UserIDFromContext(ctx context.Context) (string, bool) {
+	userID, ok := ctx.Value(userIDKey).(string)
+	return userID, ok && userID != ""
 }
 
 // respondWithJSON JSON形式でレスポンスを返す

@@ -12,8 +12,14 @@ import (
 	"time"
 
 	"task_manager_server/database/repository"
+	"task_manager_server/middleware"
 	"task_manager_server/models"
 )
+
+// withUser 認証ミドルウェアを通ったときと同じく、ユーザーIDを context に入れる
+func withUser(r *http.Request, userID string) *http.Request {
+	return r.WithContext(middleware.WithUserID(r.Context(), userID))
+}
 
 // mockTaskRepository
 type mockTaskRepository struct {
@@ -107,7 +113,7 @@ func TestTaskHandler_HandleTasks_GET_正常系(t *testing.T) {
 	_ = taskRepo.Create(context.Background(), task)
 
 	req := httptest.NewRequest(http.MethodGet, "/tasks", nil)
-	req.Header.Set("X-User-ID", "user1")
+	req = withUser(req, "user1")
 	rec := httptest.NewRecorder()
 
 	handler.HandleTasks(rec, req)
@@ -131,13 +137,48 @@ func TestTaskHandler_HandleTasks_POST_正常系(t *testing.T) {
 	}
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPost, "/tasks", bytes.NewReader(body))
-	req.Header.Set("X-User-ID", "user1")
+	req = withUser(req, "user1")
 	rec := httptest.NewRecorder()
 
 	handler.HandleTasks(rec, req)
 
 	if rec.Code != http.StatusCreated {
 		t.Errorf("Expected status 201, got %d", rec.Code)
+	}
+}
+
+// TestTaskHandler_異常系_ヘッダーだけのユーザーIDは使わない
+func TestTaskHandler_異常系_ヘッダーだけのユーザーIDは使わない(t *testing.T) {
+	cases := []struct {
+		name string
+		path string
+		byID bool
+	}{
+		{"一覧", "/tasks", false},
+		{"個別", "/tasks/task1", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+			taskRepo := newMockTaskRepository()
+			handler := NewTaskHandler(taskRepo, logger)
+			_ = taskRepo.Create(context.Background(), &repository.Task{ID: "task1", UserID: "user1", Title: "Task"})
+
+			// 認証ミドルウェアを通らずに X-User-ID だけを付けたリクエスト
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set("X-User-ID", "user1")
+			rec := httptest.NewRecorder()
+
+			if tc.byID {
+				handler.HandleTaskByID(rec, req)
+			} else {
+				handler.HandleTasks(rec, req)
+			}
+
+			if rec.Code != http.StatusUnauthorized {
+				t.Errorf("Expected status 401, got %d", rec.Code)
+			}
+		})
 	}
 }
 
@@ -171,7 +212,7 @@ func TestTaskHandler_リクエストのcontextをリポジトリへ渡す(t *tes
 
 			ctx := context.WithValue(context.Background(), requestCtxKey{}, "marker")
 			req := httptest.NewRequest(tc.method, tc.path, bytes.NewReader(tc.body)).WithContext(ctx)
-			req.Header.Set("X-User-ID", "user1")
+			req = withUser(req, "user1")
 			rec := httptest.NewRecorder()
 
 			if tc.byID {
@@ -209,7 +250,7 @@ func TestTaskHandler_HandleTaskByID_GET_正常系(t *testing.T) {
 	_ = taskRepo.Create(context.Background(), task)
 
 	req := httptest.NewRequest(http.MethodGet, "/tasks/task1", nil)
-	req.Header.Set("X-User-ID", "user1")
+	req = withUser(req, "user1")
 	rec := httptest.NewRecorder()
 
 	handler.HandleTaskByID(rec, req)
@@ -233,7 +274,7 @@ func TestTaskHandler_HandleTaskByID_GET_異常系_権限なし(t *testing.T) {
 	_ = taskRepo.Create(context.Background(), task)
 
 	req := httptest.NewRequest(http.MethodGet, "/tasks/task1", nil)
-	req.Header.Set("X-User-ID", "user2")
+	req = withUser(req, "user2")
 	rec := httptest.NewRecorder()
 
 	handler.HandleTaskByID(rec, req)
@@ -262,7 +303,7 @@ func TestTaskHandler_HandleTaskByID_PUT_正常系(t *testing.T) {
 	}
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest(http.MethodPut, "/tasks/task1", bytes.NewReader(body))
-	req.Header.Set("X-User-ID", "user1")
+	req = withUser(req, "user1")
 	rec := httptest.NewRecorder()
 
 	handler.HandleTaskByID(rec, req)
@@ -286,7 +327,7 @@ func TestTaskHandler_HandleTaskByID_DELETE_正常系(t *testing.T) {
 	_ = taskRepo.Create(context.Background(), task)
 
 	req := httptest.NewRequest(http.MethodDelete, "/tasks/task1", nil)
-	req.Header.Set("X-User-ID", "user1")
+	req = withUser(req, "user1")
 	rec := httptest.NewRecorder()
 
 	handler.HandleTaskByID(rec, req)
@@ -310,7 +351,7 @@ func TestTaskHandler_CompleteTask_正常系(t *testing.T) {
 	_ = taskRepo.Create(context.Background(), task)
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/task1/complete", nil)
-	req.Header.Set("X-User-ID", "user1")
+	req = withUser(req, "user1")
 	rec := httptest.NewRecorder()
 
 	handler.HandleTaskByID(rec, req)
@@ -364,7 +405,7 @@ func TestTaskHandler_完了状態の変更_異常系_更新後の再取得失敗
 			_ = taskRepo.Create(context.Background(), &repository.Task{ID: "task1", UserID: "user1", Title: "Task"})
 
 			req := httptest.NewRequest(http.MethodPatch, "/tasks/task1/"+tc.action, nil)
-			req.Header.Set("X-User-ID", "user1")
+			req = withUser(req, "user1")
 			rec := httptest.NewRecorder()
 
 			handler.HandleTaskByID(rec, req)
@@ -391,7 +432,7 @@ func TestTaskHandler_IncompleteTask_正常系(t *testing.T) {
 	_ = taskRepo.Create(context.Background(), task)
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/task1/incomplete", nil)
-	req.Header.Set("X-User-ID", "user1")
+	req = withUser(req, "user1")
 	rec := httptest.NewRecorder()
 
 	handler.HandleTaskByID(rec, req)

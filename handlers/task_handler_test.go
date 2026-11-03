@@ -18,6 +18,7 @@ import (
 // mockTaskRepository
 type mockTaskRepository struct {
 	tasks map[string]*repository.Task
+	ctxs  []context.Context // 受け取った context（ハンドラーがリクエストの context を渡したかの確認用）
 }
 
 func newMockTaskRepository() *mockTaskRepository {
@@ -26,7 +27,8 @@ func newMockTaskRepository() *mockTaskRepository {
 	}
 }
 
-func (m *mockTaskRepository) Create(_ context.Context, task *repository.Task) error {
+func (m *mockTaskRepository) Create(ctx context.Context, task *repository.Task) error {
+	m.ctxs = append(m.ctxs, ctx)
 	if task.ID == "" {
 		task.ID = "mock-task-id"
 	}
@@ -35,14 +37,16 @@ func (m *mockTaskRepository) Create(_ context.Context, task *repository.Task) er
 	return nil
 }
 
-func (m *mockTaskRepository) GetByID(_ context.Context, id string) (*repository.Task, error) {
+func (m *mockTaskRepository) GetByID(ctx context.Context, id string) (*repository.Task, error) {
+	m.ctxs = append(m.ctxs, ctx)
 	if t, ok := m.tasks[id]; ok {
 		return t, nil
 	}
 	return nil, nil
 }
 
-func (m *mockTaskRepository) GetByUserID(_ context.Context, userID string) ([]*repository.Task, error) {
+func (m *mockTaskRepository) GetByUserID(ctx context.Context, userID string) ([]*repository.Task, error) {
+	m.ctxs = append(m.ctxs, ctx)
 	var result []*repository.Task
 	for _, t := range m.tasks {
 		if t.UserID == userID {
@@ -52,17 +56,20 @@ func (m *mockTaskRepository) GetByUserID(_ context.Context, userID string) ([]*r
 	return result, nil
 }
 
-func (m *mockTaskRepository) Update(_ context.Context, task *repository.Task) error {
+func (m *mockTaskRepository) Update(ctx context.Context, task *repository.Task) error {
+	m.ctxs = append(m.ctxs, ctx)
 	m.tasks[task.ID] = task
 	return nil
 }
 
-func (m *mockTaskRepository) Delete(_ context.Context, id string) error {
+func (m *mockTaskRepository) Delete(ctx context.Context, id string) error {
+	m.ctxs = append(m.ctxs, ctx)
 	delete(m.tasks, id)
 	return nil
 }
 
-func (m *mockTaskRepository) Complete(_ context.Context, id string) error {
+func (m *mockTaskRepository) Complete(ctx context.Context, id string) error {
+	m.ctxs = append(m.ctxs, ctx)
 	if t, ok := m.tasks[id]; ok {
 		t.IsCompleted = true
 		now := time.Now()
@@ -72,7 +79,8 @@ func (m *mockTaskRepository) Complete(_ context.Context, id string) error {
 	return nil
 }
 
-func (m *mockTaskRepository) Incomplete(_ context.Context, id string) error {
+func (m *mockTaskRepository) Incomplete(ctx context.Context, id string) error {
+	m.ctxs = append(m.ctxs, ctx)
 	if t, ok := m.tasks[id]; ok {
 		t.IsCompleted = false
 		t.CompletedAt = nil
@@ -130,6 +138,60 @@ func TestTaskHandler_HandleTasks_POST_正常系(t *testing.T) {
 
 	if rec.Code != http.StatusCreated {
 		t.Errorf("Expected status 201, got %d", rec.Code)
+	}
+}
+
+type requestCtxKey struct{}
+
+// TestTaskHandler_リクエストのcontextをリポジトリへ渡す
+func TestTaskHandler_リクエストのcontextをリポジトリへ渡す(t *testing.T) {
+	taskBody, _ := json.Marshal(models.Task{Title: "Task", Priority: "medium"})
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		body   []byte
+		byID   bool
+	}{
+		{"一覧", http.MethodGet, "/tasks", nil, false},
+		{"作成", http.MethodPost, "/tasks", taskBody, false},
+		{"取得", http.MethodGet, "/tasks/task1", nil, true},
+		{"更新", http.MethodPut, "/tasks/task1", taskBody, true},
+		{"削除", http.MethodDelete, "/tasks/task1", nil, true},
+		{"完了", http.MethodPatch, "/tasks/task1/complete", nil, true},
+		{"未完了", http.MethodPatch, "/tasks/task1/incomplete", nil, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+			taskRepo := newMockTaskRepository()
+			handler := NewTaskHandler(taskRepo, logger)
+			_ = taskRepo.Create(context.Background(), &repository.Task{ID: "task1", UserID: "user1", Title: "Task"})
+			taskRepo.ctxs = nil
+
+			ctx := context.WithValue(context.Background(), requestCtxKey{}, "marker")
+			req := httptest.NewRequest(tc.method, tc.path, bytes.NewReader(tc.body)).WithContext(ctx)
+			req.Header.Set("X-User-ID", "user1")
+			rec := httptest.NewRecorder()
+
+			if tc.byID {
+				handler.HandleTaskByID(rec, req)
+			} else {
+				handler.HandleTasks(rec, req)
+			}
+
+			if rec.Code >= http.StatusBadRequest {
+				t.Fatalf("Expected success status, got %d", rec.Code)
+			}
+			if len(taskRepo.ctxs) == 0 {
+				t.Fatal("リポジトリが呼ばれていません")
+			}
+			for i, got := range taskRepo.ctxs {
+				if got.Value(requestCtxKey{}) != "marker" {
+					t.Errorf("%d回目の呼び出しにリクエストの context が渡っていません", i+1)
+				}
+			}
+		})
 	}
 }
 

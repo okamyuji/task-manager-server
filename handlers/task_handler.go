@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"task_manager_server/database/repository"
+	"task_manager_server/middleware"
 	"task_manager_server/models"
 	"task_manager_server/validation"
 )
@@ -28,8 +29,8 @@ func NewTaskHandler(taskRepo repository.TaskRepository, logger *slog.Logger) *Ta
 // HandleTasks タスク一覧の取得と作成
 func (h *TaskHandler) HandleTasks(w http.ResponseWriter, r *http.Request) {
 	// 認証情報を取得
-	userID := r.Header.Get("X-User-ID")
-	if userID == "" {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
 		h.logger.Warn("ユーザーIDが見つかりません")
 		RespondWithError(w, http.StatusUnauthorized, "User ID not found")
 		return
@@ -48,8 +49,8 @@ func (h *TaskHandler) HandleTasks(w http.ResponseWriter, r *http.Request) {
 // HandleTaskByID タスクの取得、更新、削除
 func (h *TaskHandler) HandleTaskByID(w http.ResponseWriter, r *http.Request) {
 	// 認証情報を取得
-	userID := r.Header.Get("X-User-ID")
-	if userID == "" {
+	userID, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
 		h.logger.Warn("ユーザーIDが見つかりません")
 		RespondWithError(w, http.StatusUnauthorized, "User ID not found")
 		return

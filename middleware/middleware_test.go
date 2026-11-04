@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,28 @@ import (
 	"task_manager_server/utils"
 	"testing"
 )
+
+// TestUserIDFromContext ユーザーIDの出し入れと、未設定・空文字の扱い
+func TestUserIDFromContext(t *testing.T) {
+	cases := []struct {
+		name   string
+		ctx    context.Context
+		wantID string
+		wantOK bool
+	}{
+		{"設定済み", WithUserID(context.Background(), "user123"), "user123", true},
+		{"未設定", context.Background(), "", false},
+		{"空文字", WithUserID(context.Background(), ""), "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			id, ok := UserIDFromContext(tc.ctx)
+			if id != tc.wantID || ok != tc.wantOK {
+				t.Errorf("UserIDFromContext() = (%q, %v), want (%q, %v)", id, ok, tc.wantID, tc.wantOK)
+			}
+		})
+	}
+}
 
 // TestLoggingMiddleware_正常系
 func TestLoggingMiddleware_正常系(t *testing.T) {
@@ -122,9 +145,9 @@ func TestAuthMiddleware_正常系(t *testing.T) {
 	called := false
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		userID := r.Header.Get("X-User-ID")
-		if userID != "user123" {
-			t.Errorf("Expected user ID user123, got %s", userID)
+		userID, ok := UserIDFromContext(r.Context())
+		if !ok || userID != "user123" {
+			t.Errorf("Expected user ID user123 in context, got %q (ok=%v)", userID, ok)
 		}
 		w.WriteHeader(http.StatusOK)
 	})
@@ -132,6 +155,8 @@ func TestAuthMiddleware_正常系(t *testing.T) {
 	middleware := AuthMiddleware(handler)
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
+	// クライアントが送った X-User-ID はユーザーIDとして使わない
+	req.Header.Set("X-User-ID", "attacker")
 	rec := httptest.NewRecorder()
 
 	middleware.ServeHTTP(rec, req)

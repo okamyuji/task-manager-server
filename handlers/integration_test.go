@@ -22,7 +22,7 @@ import (
 )
 
 // setupTestDB PostgreSQLのコンテナを起動し、本番と同じマイグレーションを流す
-func setupTestDB(t *testing.T) (*database.DB, func()) {
+func setupTestDB(t *testing.T) *database.DB {
 	t.Helper()
 	ctx := context.Background()
 
@@ -38,6 +38,8 @@ func setupTestDB(t *testing.T) (*database.DB, func()) {
 	if err != nil {
 		t.Fatalf("コンテナ起動失敗: %v", err)
 	}
+	// 以降の t.Fatalf で抜けてもコンテナが残らないよう、起動直後に登録する
+	t.Cleanup(func() { _ = pgContainer.Terminate(ctx) })
 
 	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
@@ -48,20 +50,15 @@ func setupTestDB(t *testing.T) (*database.DB, func()) {
 	if err != nil {
 		t.Fatalf("データベース接続失敗: %v", err)
 	}
+	t.Cleanup(func() { _ = db.Close() })
 	if err := db.Migrate(); err != nil {
 		t.Fatalf("マイグレーション失敗: %v", err)
 	}
-
-	cleanup := func() {
-		_ = db.Close()
-		_ = pgContainer.Terminate(ctx)
-	}
-	return db, cleanup
+	return db
 }
 
 func TestTaskAPIIntegration(t *testing.T) {
-	db, cleanup := setupTestDB(t)
-	defer cleanup()
+	db := setupTestDB(t)
 
 	// tasks.user_id は users を参照するので、先にユーザーを作る
 	hash, err := utils.HashPassword(t.Name())
